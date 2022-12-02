@@ -38,6 +38,7 @@ import copy
 import rospy
 import rospkg
 
+
 from gazebo_msgs.srv import (
     SpawnModel,
     DeleteModel,
@@ -59,6 +60,8 @@ from baxter_core_msgs.srv import (
 )
 
 import baxter_interface
+
+
 
 class PickAndPlace(object):
     def __init__(self, limb, hover_distance = 0.15, verbose=True):
@@ -181,59 +184,14 @@ class PickAndPlace(object):
         # retract to clear object
         self._retract()
 
-def load_gazebo_models(table_pose=Pose(position=Point(x=1.0, y=0.0, z=0.0)),
-                       table_reference_frame="world",
-                       block_pose=Pose(position=Point(x=0.6725, y=0.2, z=0.7825)),
-                       block_reference_frame="world",
-                       block2_pose=Pose(position=Point(x=0.8, y=0.2, z=.7825)),
-                       block2_reference_frame="world",
-                       block3_pose=Pose(position=Point(x=0.9275, y=0.2, z=.7825)),
-                       block3_reference_frame="world",
-                       block4_pose=Pose(position=Point(x=1.055, y=0.2, z=.7825)),
-                       block4_reference_frame="world",
-                       block5_pose=Pose(position=Point(x=1.1825, y=0.2, z=.7825)),
-                       block5_reference_frame="world",
-                       block6_pose=Pose(position=Point(x=1.31, y=0.2, z=.7825)),
-                       block6_reference_frame="world"):
-    # Get Models' Path
-    model_path = rospkg.RosPack().get_path('baxter_sim_examples')+"/models/"
-    # Load Table SDF
-    table_xml = ''
-    with open (model_path + "cafe_table/model.sdf", "r") as table_file:
-        table_xml=table_file.read().replace('\n', '')
-    # Spawn Table SDF
-    rospy.wait_for_service('/gazebo/spawn_sdf_model')
-    try:
-        spawn_sdf = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
-        resp_sdf = spawn_sdf("cafe_table", table_xml, "/",
-                             table_pose, table_reference_frame)
-    except rospy.ServiceException, e:
-        rospy.logerr("Spawn SDF service call failed: {0}".format(e))
-    
-    
 
-def delete_gazebo_models():
-    # This will be called on ROS Exit, deleting Gazebo models
-    # Do not wait for the Gazebo Delete Model service, since
-    # Gazebo should already be running. If the service is not
-    # available since Gazebo has been killed, it is fine to error out
-    try:
-        delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
-        resp_delete = delete_model("cafe_table")
-        resp_delete = delete_model("block")
-        resp_delete = delete_model("block2")
-
-    except rospy.ServiceException, e:
-        rospy.loginfo("Delete Model service call failed: {0}".format(e))
 
 def main():
     """RSDK Inverse Kinematics Pick and Place Example
-
     A Pick and Place example using the Rethink Inverse Kinematics
     Service which returns the joint angles a requested Cartesian Pose.
     This ROS Service client is used to request both pick and place
     poses in the /base frame of the robot.
-
     Note: This is a highly scripted and tuned demo. The object location
     is "known" and movement is done completely open loop. It is expected
     behavior that Baxter will eventually mis-pick or drop the block. You
@@ -244,54 +202,56 @@ def main():
     # Load Gazebo Models via Spawning Services
     # Note that the models reference is the /world frame
     # and the IK operates with respect to the /base frame
-    load_gazebo_models()
     # Remove models from the scene on shutdown
-    rospy.on_shutdown(delete_gazebo_models)
 
-    # Wait for the All Clear from emulator startup
-    rospy.wait_for_message("/robot/sim/started", Empty)
 
     limb = 'left'
     hover_distance = 0.15 # meters
+
     gripper = baxter_interface.Gripper('left')
     gripper.calibrate()
-    gripper = baxter_interface.Gripper('right')
-    gripper.calibrate()
-    # Starting Joint angles for left arm
-    starting_joint_angles = {'left_w0': 0.6699952259595108,
-                             'left_w1': 1.030009435085784,
-                             'left_w2': -0.4999997247485215,
-                             'left_e0': -1.189968899785275,
-                             'left_e1': 1.9400238130755056,
-                             'left_s0': -0.08000397926829805,
-                             'left_s1': -0.9999781166910306}
-    pnp = PickAndPlace(limb, hover_distance)
+
+    # Starting Joint angles for right arm
+    starting_joint_angles = {'right_w0': -0.672650575487754,
+                             'right_w1':  0.9598884780192977,
+                             'right_w2': 0.4843544337748194,
+                             'right_e0': 1.172728312338399,
+                             'right_e1': 1.9270633647810511,
+                             'right_s0': 0.06787864986392955,
+                             'right_s1': -0.9894176081860918}
+    hover_joint_angles =    {'right_w0': -0.228946632591898,
+                             'right_w1': 1.4365730078546899,
+                             'right_w2': 0.15109710760671324,
+                             'right_e0': 0.4007524808350643,
+                             'right_e1': 1.024315671110485,
+                             'right_s0': 0.7205874751091731,
+                             'right_s1': -0.95490304045867}
+    dab_left_angles = {'left_e0': -0.028378644575880154, 
+                        'left_e1': -1.017796252761972, 
+                        'left_s0': 0.30871363356193954, 
+                        'left_s1': -1.4572817484911431, 
+                        'left_w0': -0.3976845192592935,
+                        'left_w1': -0.8954612849281103, 
+                        'left_w2': 0.68568941218478,}
+    dab_right_angles = {
+                        'right_e0': 1.171961321944456, 
+                        'right_e1': 0.8310340918369229, 
+                        'right_s0': 0.3976845192592935, 
+                        'right_s1': -0.724805922275858, 
+                        'right_w0': -0.6622962051695274, 
+                        'right_w1': 0.768140879533621, 
+                        'right_w2': -0.03106311095467963}
+
+    pnp = PickAndPlace('right', hover_distance)
+    pnpl = PickAndPlace('left', hover_distance)
+    
     # An orientation for gripper fingers to be overhead and parallel to the obj
     overhead_orientation = Quaternion(
-                             x=-sqrt(2)/2,
-                             y=sqrt(2)/2,
+                             x=-2^(1/2)/2,
+                             y=2^(1/2)/2,
                              z=0,
                              w=0)
-    block_poses = list()
-    # The Pose of the block in its initial location.
-    # You may wish to replace these poses with estimates
-    # from a perception node.
-    block_poses.append(Pose(
-        position=Point(x=0.7, y=0.15, z=-0.129),
-        orientation=overhead_orientation))
-    # Feel free to add additional desired poses for the object.
-    # Each additional pose will get its own pick and place.
-    block_poses.append(Pose(
-        position=Point(x=0.75, y=0.0, z=-0.129),
-        orientation=overhead_orientation))
 
-    block_poses.append(Pose(
-        position=Point(x=.825, y=0.15, z=-.129),
-        orientation=overhead_orientation))
-
-    block_poses.append(Pose(
-        position=Point(x=0.825, y=0.0, z=-0.129),
-        orientation=overhead_orientation))
 
 
     cup_stack = list()
@@ -317,24 +277,40 @@ def main():
         orientation=overhead_orientation))
 
     cup_stack.append(Pose(
-        position=Point(x=0.5, y=0, z=0.003),
+        position=Point(x=0.5, y=0, z=0.111),
         orientation=overhead_orientation))
     
     # Move to the desired starting angles
     pnp.move_to_start(starting_joint_angles)
-    idx = 0
+    idx = 5
+    stacked_flag = 0
     while not rospy.is_shutdown():
-        # pnp.move_to_start(starting_joint_angles)
-        pnp.place(cup_stack[idx])
-        if idx < 5:
-            idx += 1
-        else:
-            idx = 0
+        if stacked_flag == 0:
+            if idx == 0:
+                pnp.move_to_start(starting_joint_angles)
+
+            pnp.pick(Pose(
+                    position=Point(x=0.685, y=-.5,z=-0.129),
+                    orientation=overhead_orientation))
+            pnp._guarded_move_to_joint_position(hover_joint_angles)
+            pnp.place(cup_stack[idx])
+            pnp._guarded_move_to_joint_position(hover_joint_angles)
+            if idx < 5:
+                idx += 1
+            else:
+                stacked_flag = 1
+                pnp._guarded_move_to_joint_position(dab_right_angles)
+                pnpl._guarded_move_to_joint_position(dab_right_angles)
+                
+
+        # pnp.gripper_open()
+        # rospy.sleep(1)
+        # pnp.gripper_close()
 
 
-    file =  open('Test.txt', 'r')
-    contents = file.read()
-    print(contents)
+    # file =  open('Test.txt', 'r')
+    # contents = file.read()
+    # print(contents)
     return 0
 
 if __name__ == '__main__':
