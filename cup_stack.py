@@ -37,6 +37,7 @@ import copy
 
 import rospy
 import rospkg
+import ast
 
 
 from gazebo_msgs.srv import (
@@ -279,23 +280,42 @@ def main():
     cup_stack.append(Pose(
         position=Point(x=0.5, y=0, z=0.111),
         orientation=overhead_orientation))
+
+
     
+    
+    file =  open('/home/ryanbarry/ros_ws/src/baxter_simulator/baxter_sim_examples/scripts/Locations.txt', 'r')
+    contents = file.read()
+    file.close()
+    print(contents)
+    loc = contents.split(" | ")
+
+    cup_locations = []
+
+    for i in range(0, len(loc)):
+        loc[i] = ast.literal_eval(loc[i])
+        cup_locations.append(Pose(
+            position=Point(x=-1*float(loc[i][0])/1000. + 0.1, y=float(loc[i][1])/1000. + 0.3, z=-.129),
+            orientation=overhead_orientation))
+
+    # print(cup_locations)
+        
+
+
     # Move to the desired starting angles
     pnp.move_to_start(starting_joint_angles)
-    idx = 5
+    idx = 0
     stacked_flag = 0
     while not rospy.is_shutdown():
         if stacked_flag == 0:
             if idx == 0:
                 pnp.move_to_start(starting_joint_angles)
 
-            pnp.pick(Pose(
-                    position=Point(x=0.685, y=-.5,z=-0.129),
-                    orientation=overhead_orientation))
+            pnp.pick(cup_locations[idx])
             pnp._guarded_move_to_joint_position(hover_joint_angles)
             pnp.place(cup_stack[idx])
             pnp._guarded_move_to_joint_position(hover_joint_angles)
-            if idx < 5:
+            if idx < 3:
                 idx += 1
             else:
                 stacked_flag = 1
