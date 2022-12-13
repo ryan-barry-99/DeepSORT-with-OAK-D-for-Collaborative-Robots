@@ -1,6 +1,6 @@
 from MultiMsgSync import TwoStageHostSeqSync
 import sys
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 import depthai as dai
 import numpy as np
@@ -10,7 +10,7 @@ import keyboard
 import time
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-NUM_CUPS = 6
+NUM_CUPS = 3
 
 
 identifiers = []
@@ -18,7 +18,7 @@ locations = [0]
 track_id = 0
 choice_flag = 0
 frame_flag = 1
-user_choice = 0
+user_choice = 1
 cycle_counter = 0
 index = 0
 cup_flag = []
@@ -28,8 +28,9 @@ time_counter = 0
 time_window = []
 avg_time = 0
 old_time = time.time()
+cup_pos = NUM_CUPS
 order = []
-max = -99999
+
 
 print("DepthAI version", dai.__version__)
 def frame_norm(frame, bbox):
@@ -351,9 +352,30 @@ with dai.Device() as device:
                 choice_flag = 1
 
             cv2.imshow("Camera", frame)
-            for identifier in identifiers:
-                ind = identifiers.index(identifier)
-                print(locations[ind][0])
+            if len(locations) == NUM_CUPS:
+                for loca in locations:
+                    if locations.index(loca) > 0:
+                        if locations[user_choice][0] < loca[0]:
+                            cup_pos -= 1
+                order = [0] * NUM_CUPS
+                order[cup_pos - 1] = 1
+                cup_pos = NUM_CUPS
+                print(order)
+            if len(order) > 0:
+                file = open("cup_locations.txt", "w")
+                file.write(str(order))
+                file.close()
+            # for loca in locations:
+            #     if len(xloc) < len(locations):
+            #         xloc.append(loca[0])
+            #     else:
+            #         # xloc[locations.index(loca)] = loca[0]
+            #     print(xloc)
+            # for identifier in identifiers:
+            #
+            #     ind = identifiers.index(identifier)
+            #     print(locations[ind][0])
+
             # if keyboard.is_pressed('Space'):
             #     # cv2.imshow("Camera", frame)
             #     locations[0] = 1
