@@ -1,6 +1,6 @@
 from MultiMsgSync import TwoStageHostSeqSync
 import sys
-# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 import depthai as dai
 import numpy as np
@@ -10,7 +10,7 @@ import keyboard
 import time
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-NUM_CUPS = 3
+NUM_CUPS = 6
 
 
 identifiers = []
@@ -352,15 +352,15 @@ with dai.Device() as device:
                 choice_flag = 1
 
             cv2.imshow("Camera", frame)
-            if len(locations) == NUM_CUPS:
+            if len(locations) == NUM_CUPS + 1:
                 for loca in locations:
                     if locations.index(loca) > 0:
-                        if locations[user_choice][0] < loca[0]:
+                        if locations[int(user_choice)][0] > loca[0]:
                             cup_pos -= 1
                 order = [0] * NUM_CUPS
                 order[cup_pos - 1] = 1
                 cup_pos = NUM_CUPS
-                print(order)
+            print(order)
             if len(order) > 0:
                 file = open("cup_locations.txt", "w")
                 file.write(str(order))
@@ -405,3 +405,4 @@ with dai.Device() as device:
             #     break
         if cv2.waitKey(1) == ord('q'):
             break
+
