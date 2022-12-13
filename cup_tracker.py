@@ -1,4 +1,6 @@
 from MultiMsgSync import TwoStageHostSeqSync
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 import depthai as dai
 import numpy as np
@@ -8,7 +10,7 @@ import keyboard
 import time
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-NUM_CUPS = 3
+NUM_CUPS = 6
 
 
 identifiers = []
@@ -19,7 +21,6 @@ frame_flag = 1
 user_choice = 0
 cycle_counter = 0
 index = 0
-boobs = 0
 cup_flag = []
 lost_cup_buffer = []  # Potentially use a buffer for multiple lost cups but might screw things up
 list_to_write = []
@@ -27,6 +28,8 @@ time_counter = 0
 time_window = []
 avg_time = 0
 old_time = time.time()
+order = []
+max = -99999
 
 print("DepthAI version", dai.__version__)
 def frame_norm(frame, bbox):
@@ -126,31 +129,26 @@ def create_pipeline(stereo, yolo_config):
     image_manip_script.setScript("""
     import time
     msgs = dict()
-
     def add_msg(msg, name, seq = None):
         global msgs
         if seq is None:
             seq = msg.getSequenceNum()
         seq = str(seq)
         # node.warn(f"New msg {name}, seq {seq}")
-
         # Each seq number has it's own dict of msgs
         if seq not in msgs:
             msgs[seq] = dict()
         msgs[seq][name] = msg
-
         # To avoid freezing (not necessary for this ObjDet model)
         if 30 < len(msgs):
             node.warn(f"Removing first element! len {len(msgs)}")
             msgs.popitem() # Remove first element
-
     def get_msgs():
         global msgs
         seq_remove = [] # Arr of sequence numbers to get deleted
         for seq, syncMsgs in msgs.items():
             seq_remove.append(seq) # Will get removed from dict if we find synced msgs pair
             # node.warn(f"Checking sync {seq}")
-
             # Check if we have both detections and color frame with this sequence number
             if len(syncMsgs) == 2: # 1 frame, 1 detection
                 for rm in seq_remove:
@@ -158,28 +156,23 @@ def create_pipeline(stereo, yolo_config):
                 # node.warn(f"synced {seq}. Removed older sync values. len {len(msgs)}")
                 return syncMsgs # Returned synced msgs
         return None
-
     def correct_bb(bb):
         if bb.xmin < 0: bb.xmin = 0.001
         if bb.ymin < 0: bb.ymin = 0.001
         if bb.xmax > 1: bb.xmax = 0.999
         if bb.ymax > 1: bb.ymax = 0.999
         return bb
-
     while True:
         time.sleep(0.001) # Avoid lazy looping
-
         preview = node.io['preview'].tryGet()
         if preview is not None:
             add_msg(preview, 'preview')
-
         dets = node.io['detections'].tryGet()
         if dets is not None:
             # TODO: in 2.18.0.0 use dets.getSequenceNum()
             passthrough = node.io['passthrough'].get()
             seq = passthrough.getSequenceNum()
             add_msg(dets, 'dets', seq)
-
         sync_msgs = get_msgs()
         if sync_msgs is not None:
             img = sync_msgs['preview']
@@ -286,7 +279,7 @@ with dai.Device() as device:
                     time_window.pop(0)
                     avg_time = round(1 / ((time_window[0] + time_window[-1]) / 50 - old_time / 25), 2)
                     old_time = time_window[0]
-                    print("Detection Rate: " + f'{avg_time}' + " Hz")
+                    # print("Detection Rate: " + f'{avg_time}' + " Hz")
                 # dtime = time.time() - old_time
                 # if dtime != 0:
                 #     print(1/dtime)
@@ -357,33 +350,36 @@ with dai.Device() as device:
                 user_choice = user_choice = input("The ball is in cup: ")
                 choice_flag = 1
 
-            # cv2.imshow("Camera", frame)
-            if keyboard.is_pressed('Space'):
-                # cv2.imshow("Camera", frame)
-                locations[0] = 1
-                # list_to_write = location_sort(locations, user_choice)
-                print('Archiving most recent locations....')
-                file = open("cup_locations.txt", "w")
-                file.write(str(locations[0]))
-                file.close()
+            cv2.imshow("Camera", frame)
+            for identifier in identifiers:
+                ind = identifiers.index(identifier)
+                print(locations[ind][0])
+            # if keyboard.is_pressed('Space'):
+            #     # cv2.imshow("Camera", frame)
+            #     locations[0] = 1
+            #     # list_to_write = location_sort(locations, user_choice)
+            #     print('Archiving most recent locations....')
+            #     file = open("cup_locations.txt", "w")
+            #     file.write(str(locations[0]))
+            #     file.close()
 
-                for i in range(1, NUM_CUPS + 1):
-                    if int(i) != int(user_choice):
-                        # print(i)
-                        # print(user_choice)
-                        # print(i==user_choice)
-                        file = open("cup_locations.txt", "a")
-                        # print(" | " + str(locations[i]))
-                        file.write(" | " + str(locations[i]))
-                        file.close()
-                        continue
-                    # file.write(str(user_choice + "\n"))
-                file = open("cup_locations.txt", "a")
-                file.write(" | " + str(locations[int(user_choice)]))
-                # print(" | " + str(locations[int(user_choice)]))
-                file.close()
-                break
-            if keyboard.is_pressed('x') or keyboard.is_pressed('X'):
-                break
+            #     for i in range(1, NUM_CUPS + 1):
+            #         if int(i) != int(user_choice):
+            #             # print(i)
+            #             # print(user_choice)
+            #             # print(i==user_choice)
+            #             file = open("cup_locations.txt", "a")
+            #             # print(" | " + str(locations[i]))
+            #             file.write(" | " + str(locations[i]))
+            #             file.close()
+            #             continue
+            #         # file.write(str(user_choice + "\n"))
+            #     file = open("cup_locations.txt", "a")
+            #     file.write(" | " + str(locations[int(user_choice)]))
+            #     # print(" | " + str(locations[int(user_choice)]))
+            #     file.close()
+            #     break
+            # if keyboard.is_pressed('x') or keyboard.is_pressed('X'):
+            #     break
         if cv2.waitKey(1) == ord('q'):
             break
