@@ -5,10 +5,11 @@ import numpy as np
 import json
 import blobconverter
 import keyboard
-
+import time
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-NUM_CUPS = 2
+NUM_CUPS = 3
+
 
 identifiers = []
 locations = [0]
@@ -18,12 +19,18 @@ frame_flag = 1
 user_choice = 0
 cycle_counter = 0
 index = 0
+boobs = 0
 cup_flag = []
 lost_cup_buffer = []  # Potentially use a buffer for multiple lost cups but might screw things up
 list_to_write = []
+time_counter = 0
+time_window = []
+avg_time = 0
+old_time = time.time()
 
 print("DepthAI version", dai.__version__)
 def frame_norm(frame, bbox):
+
     normVals = np.full(len(bbox), frame.shape[0])
     normVals[::2] = frame.shape[1]
     return (np.clip(np.array(bbox), 0, 1) * normVals).astype(int)
@@ -87,9 +94,9 @@ def create_pipeline(stereo, yolo_config):
     else: # Detection network if OAK-1
         print("OAK-1 detected, app won't display spatial coordiantes")
         obj_det = pipeline.create(dai.node.YoloDetectionNetwork)
-    
+
     metadata = yolo_config.get("NN_specific_metadata", {})
-    
+
     obj_det.setBlobPath(blobconverter.from_zoo(name="yolov6n_coco_640x640", zoo_type="depthai", shaves=6, use_cache=False))
     confidence = metadata.get("confidence_threshold", config.get("confidence_threshold", 0.15))
     obj_det.setConfidenceThreshold(confidence)
@@ -236,10 +243,10 @@ with dai.Device() as device:
         config = raw_config.get("nn_config", {})
         mappings = raw_config.get("mappings", {})
         labels = mappings.get("labels", {})
-    
+
     device.startPipeline(create_pipeline(stereo, config))
 
-    tracker = DeepSort(max_age=1000, nn_budget=None, embedder=None, nms_max_overlap=1.0, max_cosine_distance=1.0)
+    tracker = DeepSort(max_age=1000, nn_budget=None, embedder=None, nms_max_overlap=0.2, max_cosine_distance=0.05)
 
     sync = TwoStageHostSeqSync()
     queues = {}
@@ -265,27 +272,42 @@ with dai.Device() as device:
             object_tracks = tracker_iter(detections, embeddings, tracker, frame)
 
 
+
             # For each tracking object
             for track in object_tracks:
+
                 if not track.is_confirmed() or track.time_since_update > 1 or track.detection_id >= len(detections) or track.detection_id < 0:
                     if track.track_id in identifiers and track.time_since_update > 5:
                         cup_flag[identifiers.index(track.track_id)] = 0
                         print(f'{identifiers.index(track.track_id)+1}' + " out of frame")
                     continue
+                time_window.append(time.time())
+                if len(time_window) >= 25:
+                    time_window.pop(0)
+                    avg_time = round(1 / ((time_window[0] + time_window[-1]) / 50 - old_time / 25), 2)
+                    old_time = time_window[0]
+                    print("Detection Rate: " + f'{avg_time}' + " Hz")
+                # dtime = time.time() - old_time
+                # if dtime != 0:
+                #     print(1/dtime)
+                # old_time = time.time()
                 detection = detections[track.detection_id]
                 # print(cup_flag)
-                print(identifiers)
+                # print(identifiers)
                 # print(index)
-                print(locations)
+                # print(locations)
                 if labels[detection.label] == 'cup':
                     if track.track_id not in identifiers and len(identifiers) < NUM_CUPS:
                         identifiers.append(track.track_id)
                         loc = detection.spatialCoordinates
-                        locations.append([loc.x/1000, loc.y/1000, loc.z/1000])
+                        # locations.append([round(-1*loc.z/1000, 4), round(loc.x/1000, 4), round(loc.y/1000, 4)])
+                        locations.append([int(-1 * loc.z), int(loc.x), int(loc.y)])
+
                         cup_flag.append(1)
 
                     elif track.track_id not in identifiers and len(identifiers) == NUM_CUPS and 0 in cup_flag:
                         index = cup_flag.index(0)
+                        # if cup_flag.count(0) == 1:
                         identifiers[index] = track.track_id
                         cup_flag[index] = 1
 
@@ -293,7 +315,8 @@ with dai.Device() as device:
                         index = identifiers.index(track.track_id)
                         loc = detection.spatialCoordinates
                         cup_flag[index] = 1
-                        locations[index+1] = [loc.x/1000, loc.y/1000, loc.z/1000]
+                        # locations[index+1] = [round(-1*loc.z/1000, 4), round(loc.x/1000, 4), round(loc.y/1000, 4)]
+                        locations[index+1] = [int(-1 * loc.z), int(loc.x), int(loc.y)]
 
                     if track.track_id not in identifiers:
                         continue
@@ -306,6 +329,7 @@ with dai.Device() as device:
                 # Displaying
                 #     if frame_flag == 1:
                     cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (10, 245, 10), 2)
+
                     if frame_flag == 1:
                         cv2.putText(frame, f'Cup {track_id}', (x, y), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 0, 0), 8)
                         cv2.putText(frame, f'Cup {track_id}', (x, y), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255), 2)
@@ -313,16 +337,17 @@ with dai.Device() as device:
                     # cv2.putText(frame, f'Label: {labels[detection.label] if labels != {} else detection.label}, Confidence: {detection.confidence*100:.2f}%', (x, y + 30), cv2.FONT_HERSHEY_TRIPLEX, 0.7, (255, 255, 255), 2)
                     if stereo:
                         # You could also get detection.spatialCoordinates.x and detection.spatialCoordinates.y coordinates
-                        coords = "({:.2f}, ".format(detection.spatialCoordinates.x/1000) + "{:.2f}, ".format(detection.spatialCoordinates.y/1000) + "{:.2f}) m".format(detection.spatialCoordinates.z/1000)
+                        coords = "({:.2f}, ".format(-1*detection.spatialCoordinates.z/1000) + "{:.2f}, ".format(detection.spatialCoordinates.x/1000) + "{:.2f}) m".format(detection.spatialCoordinates.y/1000)
                         cv2.putText(frame, coords, (x, y + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.7, (0, 0, 0), 8)
                         cv2.putText(frame, coords, (x, y + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.7, (255, 255, 255), 2)
 
                         # print(len(identifiers))
                         # print(user_choice)
+                        # print(locations[1])
                         # print(f'Cup {track_id}: ' + "X: {:.3f} m".format(detection.spatialCoordinates.x/1000) + "    Y: {:.3f} m".format(detection.spatialCoordinates.y/1000) + "    Z: {:.3f} m".format(detection.spatialCoordinates.z/1000) + '\n\n')
 
-
-            cv2.imshow("Camera", frame)
+            if user_choice == 0:
+                cv2.imshow("Camera", frame)
 
             if len(identifiers) == NUM_CUPS and cycle_counter < 10 and 0 not in cup_flag:
                 cycle_counter = cycle_counter + 1
@@ -332,12 +357,30 @@ with dai.Device() as device:
                 user_choice = user_choice = input("The ball is in cup: ")
                 choice_flag = 1
 
+            # cv2.imshow("Camera", frame)
             if keyboard.is_pressed('Space'):
+                # cv2.imshow("Camera", frame)
                 locations[0] = 1
-                list_to_write = location_sort(locations, user_choice)
+                # list_to_write = location_sort(locations, user_choice)
                 print('Archiving most recent locations....')
                 file = open("cup_locations.txt", "w")
-                file.write(str(list_to_write))
+                file.write(str(locations[0]))
+                file.close()
+
+                for i in range(1, NUM_CUPS + 1):
+                    if int(i) != int(user_choice):
+                        # print(i)
+                        # print(user_choice)
+                        # print(i==user_choice)
+                        file = open("cup_locations.txt", "a")
+                        # print(" | " + str(locations[i]))
+                        file.write(" | " + str(locations[i]))
+                        file.close()
+                        continue
+                    # file.write(str(user_choice + "\n"))
+                file = open("cup_locations.txt", "a")
+                file.write(" | " + str(locations[int(user_choice)]))
+                # print(" | " + str(locations[int(user_choice)]))
                 file.close()
                 break
             if keyboard.is_pressed('x') or keyboard.is_pressed('X'):
