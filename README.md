@@ -1,4 +1,4 @@
-# Object tracking using DeepSORT
+# DeepSORT with OAK-D for Collaborative Robots
 
 This project is a real-time cup tracking implementation of DeepSORT with DepthAI library.
 It tracks detected objects in the frames. Demo uses [YoloV6n](https://github.com/meituan/YOLOv6) model to detect objects, crops them on the device using Script node, and then sends object frames to [MobileNetV2](https://pytorch.org/hub/pytorch_vision_mobilenet_v2/) feature extraction model which computes the embedding of the object.
